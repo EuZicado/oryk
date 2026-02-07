@@ -2,27 +2,32 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { ImageState } from "../types";
 
-const API_KEY = process.env.API_KEY || "";
-
-const SYSTEM_INSTRUCTION = `You are ØRYK, a world-class Roblox GFX and thumbnail artist. 
-Your goal is to transform Roblox screenshots and renders into professional-grade thumbnails.
-Common tasks: Adding volumetric lighting (Godrays), glowing eyes to avatars, realistic plastic or cloth textures, motion blur, and cinematic backgrounds (Bloxburg, Brookhaven, or simulator styles).
-Always maintain the iconic blocky look of Roblox while adding high-fidelity visual effects. 
-If the user provides a prompt, prioritize the high-energy, colorful, and click-worthy aesthetic popular on the Roblox platform.`;
+const SYSTEM_INSTRUCTION = `Você é ØRYK, um artista de GFX e thumbnails de Roblox de classe mundial.
+Seu objetivo é transformar capturas de tela do Roblox em thumbnails profissionais de alta qualidade.
+Mantenha sempre o visual icônico "blocky" do Roblox, mas adicione efeitos visuais de alta fidelidade como:
+- Iluminação volumétrica (Godrays)
+- Materiais realistas (plástico PBR, reflexos em neon)
+- Profundidade de campo cinematográfica
+- Efeitos de partícula e aura vibrantes
+- Ambientação de jogos populares (Blox Fruits, Brookhaven, Pet Simulator 99).
+Priorize uma estética de alta energia, colorida e chamativa.`;
 
 export const editImage = async (
   image: ImageState,
   prompt: string
 ): Promise<string> => {
-  if (!API_KEY) {
-    throw new Error("API Key is missing.");
+  // Sempre criar uma nova instância para capturar a chave de API mais recente do ambiente
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("Chave de API não configurada. Por favor, conecte sua conta.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
   
   try {
+    // Usando gemini-3-pro-image-preview para máxima qualidade GFX
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3-pro-image-preview',
       contents: {
         parts: [
           {
@@ -32,10 +37,15 @@ export const editImage = async (
             },
           },
           {
-            text: `${SYSTEM_INSTRUCTION}\n\nUser Request: ${prompt}`,
+            text: `${SYSTEM_INSTRUCTION}\n\nPedido do Usuário: ${prompt}`,
           },
         ],
       },
+      config: {
+        imageConfig: {
+          aspectRatio: "16:9" // Otimizado para Thumbnails de Youtube/Roblox
+        }
+      }
     });
 
     let resultImageBase64 = "";
@@ -50,12 +60,19 @@ export const editImage = async (
     }
 
     if (!resultImageBase64) {
-      throw new Error(response.text || "Model failed to generate a visual update.");
+      const errorMsg = response.text || "";
+      if (errorMsg.includes("quota") || errorMsg.includes("exhausted")) {
+        throw new Error("Cota de API excedida. Use uma chave de um projeto com faturamento ativo.");
+      }
+      throw new Error("O modelo não conseguiu gerar a atualização visual.");
     }
 
     return `data:image/png;base64,${resultImageBase64}`;
   } catch (error: any) {
-    console.error("ØRYK Error:", error);
-    throw new Error(error.message || "Failed to edit image.");
+    console.error("ØRYK Engine Error:", error);
+    if (error.message?.includes("429")) {
+      throw new Error("Limite de requisições atingido. Aguarde um momento ou troque sua API Key.");
+    }
+    throw new Error(error.message || "Falha na renderização da imagem.");
   }
 };
