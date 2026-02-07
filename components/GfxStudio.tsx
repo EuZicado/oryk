@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ImageState, HistoryItem, GfxViewMode } from '../types';
 import ImageUpload from './ImageUpload';
 import LoadingSpinner from './LoadingSpinner';
@@ -16,8 +16,28 @@ export const GfxStudio: React.FC = () => {
   const [brushSize, setBrushSize] = useState(40);
   const [currentMask, setCurrentMask] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<GfxViewMode>('brush');
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
   const { isProcessing, error, renderGfx } = useGfxEngine();
+
+  useEffect(() => {
+    checkKey();
+  }, []);
+
+  const checkKey = async () => {
+    try {
+      const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+      setHasApiKey(hasKey);
+    } catch (e) {
+      setHasApiKey(false);
+    }
+  };
+
+  const handleConnect = async () => {
+    await (window as any).aistudio.openSelectKey();
+    // Após abrir o seletor, assumimos que o usuário tentará prosseguir
+    setHasApiKey(true);
+  };
 
   const handleEdit = async () => {
     if (!source || !prompt.trim()) return;
@@ -36,7 +56,11 @@ export const GfxStudio: React.FC = () => {
         timestamp: Date.now(),
         mask: currentMask || undefined
       }, ...prev].slice(0, 10));
-    } catch (e) { /* Erro gerenciado no hook */ }
+    } catch (e: any) {
+      if (e.message?.includes("Requested entity was not found")) {
+        setHasApiKey(false);
+      }
+    }
   };
 
   const handleUpload = (img: ImageState) => {
@@ -54,6 +78,40 @@ export const GfxStudio: React.FC = () => {
     setCurrentMask(null);
   };
 
+  // Tela de Bloqueio se não houver chave
+  if (hasApiKey === false) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 px-6 text-center space-y-8 animate-in fade-in duration-700">
+        <div className="w-20 h-20 bg-purple-600 rounded-3xl flex items-center justify-center shadow-[0_0_40px_rgba(168,85,247,0.3)] rotate-3">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </div>
+        <div className="space-y-4 max-w-md">
+          <h2 className="text-4xl font-black tracking-tight uppercase">Desbloquear ØRYK PRO</h2>
+          <p className="text-zinc-500 font-medium leading-relaxed">
+            Para gerar GFX profissionais sem limites de cota, você precisa conectar sua própria chave de API do Google Gemini.
+          </p>
+          <div className="pt-4 space-y-3">
+            <button 
+              onClick={handleConnect}
+              className="w-full bg-white text-black font-black uppercase tracking-widest py-4 rounded-2xl hover:bg-purple-500 hover:text-white transition-all shadow-xl active:scale-95"
+            >
+              Conectar Gemini API
+            </button>
+            <a 
+              href="https://ai.google.dev/gemini-api/docs/billing" 
+              target="_blank" 
+              className="block text-[10px] font-bold text-zinc-600 uppercase tracking-widest hover:text-zinc-400 transition-colors"
+            >
+              Saiba mais sobre faturamento e cotas
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6">
       {!source ? (
@@ -63,7 +121,7 @@ export const GfxStudio: React.FC = () => {
               Transforme seu <br/> <span className="text-purple-500">Roblox GFX</span>
             </h2>
             <p className="text-zinc-500 text-lg max-w-xl mx-auto font-medium">
-              Suba um screenshot e descreva sua visão. A IA da ØRYK cuida do resto com qualidade profissional.
+              Suba um screenshot e descreva sua visão. O modelo Gemini 3 Pro cuida do resto.
             </p>
           </div>
           <div className="w-full max-w-2xl">
@@ -127,8 +185,14 @@ export const GfxStudio: React.FC = () => {
               )}
               
               {error && (
-                <div className="absolute bottom-4 left-4 right-4 bg-red-500/90 text-white p-3 rounded-xl text-xs font-bold backdrop-blur-md">
-                  {error}
+                <div className="absolute bottom-4 left-4 right-4 bg-red-500/90 text-white p-4 rounded-xl text-xs font-bold backdrop-blur-md shadow-2xl border border-red-400/20">
+                  <div className="flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <span>{error}</span>
+                  </div>
+                  {error.includes("Cota") && (
+                    <button onClick={handleConnect} className="mt-2 text-[9px] uppercase tracking-widest underline opacity-80 hover:opacity-100">Trocar Chave de API</button>
+                  )}
                 </div>
               )}
             </div>
@@ -159,7 +223,10 @@ export const GfxStudio: React.FC = () => {
           {/* Side History */}
           <div className="lg:col-span-4 space-y-6">
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 flex flex-col h-full min-h-[400px]">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 mb-6">Últimas Renderizações</h3>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">Histórico</h3>
+                <span className="text-[8px] font-bold text-purple-500 bg-purple-500/10 px-2 py-1 rounded">GEMINI 3 PRO</span>
+              </div>
               <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
                 {history.map(item => (
                   <div 
@@ -167,15 +234,16 @@ export const GfxStudio: React.FC = () => {
                     className="group relative bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden cursor-pointer hover:border-purple-500 transition-all"
                     onClick={() => { setSource(item.original); setResult(item.result); setPrompt(item.prompt); setViewMode('slider'); }}
                   >
-                    <img src={item.result.url} className="w-full aspect-video object-cover" alt="Histórico" />
-                    <div className="p-3 bg-black/60 backdrop-blur-md">
+                    <img src={item.result.url} className="w-full aspect-video object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="Histórico" />
+                    <div className="p-3 bg-black/60 backdrop-blur-md border-t border-zinc-800/50">
                       <p className="text-[10px] text-zinc-400 line-clamp-1 italic">"{item.prompt}"</p>
                     </div>
                   </div>
                 ))}
                 {history.length === 0 && (
-                  <div className="h-full flex items-center justify-center opacity-20 grayscale">
-                    <p className="text-[10px] font-black uppercase tracking-widest">Vazio</p>
+                  <div className="h-full flex flex-col items-center justify-center opacity-20 grayscale space-y-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    <p className="text-[10px] font-black uppercase tracking-widest">Nenhum Projeto</p>
                   </div>
                 )}
               </div>
