@@ -1,0 +1,8 @@
+
+{
+  "name": "ØRYK | Roblox GFX Studio",
+  "description": "The ultimate AI-powered thumbnail and GFX editor for Roblox creators. Transform avatars, create epic backgrounds, and retouch thumbnails with precision brush tools.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
